@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f172a">
+  <title>Family Wealth</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #f1f5f9; color: #0f172a; }
+    header { background: #0f172a; color: white; padding: 18px; }
+    h1 { margin: 0; font-size: 20px; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
+    .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 2px 8px #0001; }
+    .label { font-size: 12px; color: #64748b; }
+    .value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .positive { color: #16a34a; }
+    .negative { color: #dc2626; }
+    .tabs { display: flex; overflow-x: auto; background: white; border-bottom: 1px solid #e2e8f0; }
+    .tab { padding: 14px 16px; white-space: nowrap; font-weight: 600; color: #64748b; }
+    .tab.active { color: #2563eb; border-bottom: 3px solid #2563eb; }
+    .section { padding: 16px; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; }
+    th, td { padding: 10px; font-size: 13px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; }
+    .empty { background: white; padding: 24px; border-radius: 16px; text-align: center; color: #64748b; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Family Wealth</h1>
+    <div id="updated"></div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="dashboard">Dashboard</div>
+    <div class="tab" data-tab="shares">Shares</div>
+    <div class="tab" data-tab="mutualfunds">Mutual Funds</div>
+    <div class="tab" data-tab="bonds">Bonds</div>
+    <div class="tab" data-tab="gold">Gold</div>
+    <div class="tab" data-tab="schemes">Schemes</div>
+  </div>
+
+  <div id="dashboard" class="section">
+    <div class="cards" id="summaryCards"></div>
+    <div class="card"><canvas id="wealthChart" height="220"></canvas></div>
+  </div>
+
+  <div id="shares" class="section hidden">
+    <div class="empty">Share holdings will appear here.</div>
+  </div>
+
+  <div id="mutualfunds" class="section hidden">
+    <div id="mfTable"></div>
+  </div>
+
+  <div id="bonds" class="section hidden">
+    <div class="empty">No bonds yet. Add them in the BONDS tab of your INVESTMENT sheet.</div>
+  </div>
+
+  <div id="gold" class="section hidden">
+    <div class="empty">Gold holdings will appear here.</div>
+  </div>
+
+  <div id="schemes" class="section hidden">
+    <div class="empty">Insurance and schemes will appear here.</div>
+  </div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbExample123456789/exec';
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(tab.dataset.tab).classList.remove('hidden');
+  };
+});
+
+function inr(n) {
+  return '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
+async function load() {
+  const summary = await (await fetch(API_URL + '?action=summary')).json();
+  const graph = await (await fetch(API_URL + '?action=graph')).json();
+
+  let invested = 0, current = 0, realized = 0;
+
+  Object.values(summary.holders || {}).forEach(h => {
+    invested += h.invested;
+    current += h.current;
+    realized += h.realized;
+  });
+
+  invested += summary.bonds.invested;
+  current += summary.bonds.current;
+
+  const profit = current - invested + realized;
+  const profitClass = profit >= 0 ? 'positive' : 'negative';
+
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card"><div class="label">Total Invested</div><div class="value">${inr(invested)}</div></div>
+    <div class="card"><div class="label">Current Value</div><div class="value">${inr(current)}</div></div>
+    <div class="card"><div class="label">Total Profit</div><div class="value ${profitClass}">${inr(profit)}</div></div>
+    <div class="card"><div class="label">Bonds</div><div class="value">${inr(summary.bonds.current)}</div></div>
+  `;
+
+  document.getElementById('updated').textContent =
+    'Updated ' + new Date().toLocaleString('en-IN');
+
+  const labels = graph.history.map(h => h.date);
+  new Chart(document.getElementById('wealthChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Invested', data: graph.history.map(h => h.invested), borderColor: '#64748b', tension: .3 },
+        { label: 'Current Value', data: graph.history.map(h => h.current), borderColor: '#2563eb', tension: .3 }
+      ]
+    }
+  });
+
+  const mf = await (await fetch(API_URL + '?action=holdings')).json();
+  const rows = (mf.mutualFunds || []).map(f => `
+    <tr>
+      <td>${f['Symbol'] || ''}</td>
+      <td>${inr(f['AMOUNT'])}</td>
+      <td>${inr(f['CURRENT VALUE'])}</td>
+      <td>${inr(f['PROFIT'])}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('mfTable').innerHTML = rows
+    ? `<table><tr><th>Fund</th><th>Invested</th><th>Current</th><th>Profit</th></tr>${rows}</table>`
+    : '<div class="empty">No mutual funds found.</div>';
+}
+
+load();
+</script>
+</body>
+</html>
