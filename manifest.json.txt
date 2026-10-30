@@ -1,9 +1,0 @@
-{
-  "name": "Family Wealth",
-  "short_name": "Wealth",
-  "start_url": "index.html",
-  "display": "standalone",
-  "background_color": "#f1f5f9",
-  "theme_color": "#0f172a",
-  "icons": []
-}
